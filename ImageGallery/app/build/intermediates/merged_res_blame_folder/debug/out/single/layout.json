@@ -1,0 +1,22 @@
+[
+    {
+        "merged": "C:\\Users\\92892\\.gradle\\daemon\\8.2\\com.example.imagegallery.app-mergeDebugResources-36:\\layout\\item_image_full.xml",
+        "source": "C:\\Users\\92892\\.gradle\\daemon\\8.2\\com.example.imagegallery.app-main-39:\\layout\\item_image_full.xml"
+    },
+    {
+        "merged": "C:\\Users\\92892\\.gradle\\daemon\\8.2\\com.example.imagegallery.app-mergeDebugResources-36:\\layout\\item_gallery.xml",
+        "source": "C:\\Users\\92892\\.gradle\\daemon\\8.2\\com.example.imagegallery.app-main-39:\\layout\\item_gallery.xml"
+    },
+    {
+        "merged": "com.example.imagegallery.app-mergeDebugResources-36:/layout/activity_image_viewer.xml",
+        "source": "com.example.imagegallery.app-main-39:/layout/activity_image_viewer.xml"
+    },
+    {
+        "merged": "C:\\Users\\92892\\.gradle\\daemon\\8.2\\com.example.imagegallery.app-mergeDebugResources-36:\\layout\\activity_image_viewer.xml",
+        "source": "C:\\Users\\92892\\.gradle\\daemon\\8.2\\com.example.imagegallery.app-main-39:\\layout\\activity_image_viewer.xml"
+    },
+    {
+        "merged": "C:\\Users\\92892\\.gradle\\daemon\\8.2\\com.example.imagegallery.app-mergeDebugResources-36:\\layout\\activity_main.xml",
+        "source": "C:\\Users\\92892\\.gradle\\daemon\\8.2\\com.example.imagegallery.app-main-39:\\layout\\activity_main.xml"
+    }
+]
