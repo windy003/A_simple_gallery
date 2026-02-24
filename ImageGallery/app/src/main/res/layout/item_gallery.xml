@@ -7,12 +7,28 @@
     app:cardCornerRadius="4dp"
     app:cardElevation="2dp">
 
-    <ImageView
-        android:id="@+id/imageView"
+    <FrameLayout
         android:layout_width="match_parent"
-        android:layout_height="120dp"
-        android:background="@drawable/placeholder"
-        android:contentDescription="@string/gallery_image"
-        android:scaleType="centerCrop" />
+        android:layout_height="120dp">
+
+        <ImageView
+            android:id="@+id/imageView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/placeholder"
+            android:contentDescription="@string/gallery_image"
+            android:scaleType="centerCrop" />
+
+        <!-- 视频播放图标，仅视频时显示 -->
+        <ImageView
+            android:id="@+id/playIcon"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_gravity="center"
+            android:contentDescription="@string/gallery_video"
+            android:src="@drawable/ic_play"
+            android:visibility="gone" />
+
+    </FrameLayout>
 
 </androidx.cardview.widget.CardView>

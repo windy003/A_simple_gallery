@@ -1,8 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">图片浏览器</string>
-    <string name="no_images">没有找到图片</string>
+    <string name="no_images">没有找到图片或视频</string>
     <string name="gallery_image">相册图片</string>
+    <string name="gallery_video">相册视频</string>
+    <string name="video_duration">时长</string>
+    <string name="media_info">文件详情</string>
     <string name="back">返回</string>
     <string name="permission_required">需要存储权限才能浏览图片</string>
     <string name="grant_permission">授予权限</string>

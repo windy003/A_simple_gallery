@@ -32,7 +32,6 @@ class ImageViewerActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 启用边到边显示
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
         binding = ActivityImageViewerBinding.inflate(layoutInflater)
@@ -45,7 +44,6 @@ class ImageViewerActivity : AppCompatActivity() {
     }
 
     private fun setupSystemUi() {
-        // 处理状态栏边距
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, windowInsets ->
             val insets = windowInsets.getInsets(WindowInsetsCompat.Type.statusBars())
             val defaultMargin = (8 * resources.displayMetrics.density).toInt()
@@ -88,7 +86,6 @@ class ImageViewerActivity : AppCompatActivity() {
             binding.btnInfo.visibility = View.GONE
         } else {
             showSystemUi()
-            // 只有多张图片时显示计数器
             if (images.size > 1) {
                 binding.imageCounter.visibility = View.VISIBLE
             }
@@ -98,24 +95,23 @@ class ImageViewerActivity : AppCompatActivity() {
     }
 
     private fun loadData() {
-        // 检查是否从外部应用打开（文件浏览器等）
         if (intent.action == android.content.Intent.ACTION_VIEW && intent.data != null) {
             val uri = intent.data!!
-            val externalImage = ImageItem(
+            val mimeType = intent.type ?: contentResolver.getType(uri) ?: ""
+            val isVideo = mimeType.startsWith("video/")
+
+            val externalItem = ImageItem(
                 id = 0,
                 uri = uri,
                 name = getFileNameFromUri(uri),
                 path = uri.path ?: "",
                 dateAdded = 0,
                 dateModified = 0,
-                size = 0
+                size = 0,
+                isVideo = isVideo
             )
-            images = listOf(externalImage)
-
-            // 尝试获取更多文件信息
-            tryLoadExternalImageInfo(uri)
+            images = listOf(externalItem)
         } else {
-            // 从应用内部打开
             images = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 intent.getParcelableArrayListExtra(EXTRA_IMAGES, ImageItem::class.java) ?: emptyList()
             } else {
@@ -141,34 +137,6 @@ class ImageViewerActivity : AppCompatActivity() {
             name = uri.lastPathSegment ?: "Unknown"
         }
         return name
-    }
-
-    private fun tryLoadExternalImageInfo(uri: android.net.Uri) {
-        try {
-            contentResolver.query(uri, null, null, null, null)?.use { cursor ->
-                if (cursor.moveToFirst()) {
-                    val sizeIndex = cursor.getColumnIndex(android.provider.OpenableColumns.SIZE)
-                    val size = if (sizeIndex >= 0) cursor.getLong(sizeIndex) else 0L
-
-                    val dateModifiedIndex = cursor.getColumnIndex("date_modified")
-                    val dateModified = if (dateModifiedIndex >= 0) cursor.getLong(dateModifiedIndex) else 0L
-
-                    val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
-                    val name = if (nameIndex >= 0) cursor.getString(nameIndex) ?: "" else ""
-
-                    if (images.isNotEmpty()) {
-                        val current = images[0]
-                        images = listOf(current.copy(
-                            name = name.ifEmpty { current.name },
-                            size = size,
-                            dateModified = dateModified
-                        ))
-                    }
-                }
-            }
-        } catch (_: Exception) {
-            // 忽略错误，使用默认值
-        }
     }
 
     private fun setupViewPager() {
@@ -207,26 +175,30 @@ class ImageViewerActivity : AppCompatActivity() {
         }
 
         binding.btnInfo.setOnClickListener {
-            showImageInfo()
+            showMediaInfo()
         }
     }
 
-    private fun showImageInfo() {
+    private fun showMediaInfo() {
         val currentPosition = binding.viewPager.currentItem
         if (currentPosition < 0 || currentPosition >= images.size) return
 
-        val image = images[currentPosition]
+        val item = images[currentPosition]
         val dateFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
         val unknown = getString(R.string.info_unknown)
 
-        val dateAdded = if (image.dateAdded > 0) dateFormat.format(Date(image.dateAdded * 1000)) else unknown
-        val dateModified = if (image.dateModified > 0) dateFormat.format(Date(image.dateModified * 1000)) else unknown
-        val fileSize = if (image.size > 0) formatFileSize(image.size) else unknown
-        val path = image.path.ifEmpty { image.uri.toString() }
+        val dateAdded = if (item.dateAdded > 0) dateFormat.format(Date(item.dateAdded * 1000)) else unknown
+        val dateModified = if (item.dateModified > 0) dateFormat.format(Date(item.dateModified * 1000)) else unknown
+        val fileSize = if (item.size > 0) formatFileSize(item.size) else unknown
+        val path = item.path.ifEmpty { item.uri.toString() }
+
+        val durationLine = if (item.isVideo && item.duration > 0) {
+            "\n\n${getString(R.string.video_duration)}:\n${formatDuration(item.duration)}"
+        } else ""
 
         val message = """
             |${getString(R.string.info_name)}:
-            |${image.name}
+            |${item.name}
             |
             |${getString(R.string.info_path)}:
             |$path
@@ -238,14 +210,28 @@ class ImageViewerActivity : AppCompatActivity() {
             |$dateAdded
             |
             |${getString(R.string.info_date_modified)}:
-            |$dateModified
+            |$dateModified$durationLine
         """.trimMargin()
 
+        val title = if (item.isVideo) R.string.media_info else R.string.image_info
+
         MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.image_info)
+            .setTitle(title)
             .setMessage(message)
             .setPositiveButton(R.string.close, null)
             .show()
+    }
+
+    private fun formatDuration(durationMs: Long): String {
+        val totalSeconds = durationMs / 1000
+        val hours = totalSeconds / 3600
+        val minutes = (totalSeconds % 3600) / 60
+        val seconds = totalSeconds % 60
+        return if (hours > 0) {
+            String.format(Locale.getDefault(), "%d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds)
+        }
     }
 
     private fun formatFileSize(size: Long): String {

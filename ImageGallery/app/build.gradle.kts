@@ -13,7 +13,7 @@ android {
         minSdk = 24
         targetSdk = 34
         versionCode = 1
-        versionName = "2026/2/1-1"
+        versionName = "2026/2/25-1"
     }
 
     buildTypes {
@@ -50,6 +50,7 @@ dependencies {
 
     // Coil - 图片加载
     implementation("io.coil-kt:coil:2.5.0")
+    implementation("io.coil-kt:coil-video:2.5.0")
 
     // PhotoView - 手势缩放
     implementation("com.github.chrisbanes:PhotoView:2.3.0")

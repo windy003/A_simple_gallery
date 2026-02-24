@@ -15,5 +15,7 @@ data class ImageItem(
     val path: String,
     val dateAdded: Long,
     val dateModified: Long,
-    val size: Long
+    val size: Long,
+    val isVideo: Boolean = false,
+    val duration: Long = 0L
 ) : Parcelable

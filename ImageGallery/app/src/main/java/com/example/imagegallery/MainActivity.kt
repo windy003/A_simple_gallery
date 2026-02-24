@@ -23,15 +23,28 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var adapter: GalleryAdapter
-    private var images: List<ImageItem> = emptyList()
+    private var mediaItems: List<ImageItem> = emptyList()
 
     private val executor = Executors.newSingleThreadExecutor()
 
-    private val requestPermissionLauncher = registerForActivityResult(
+    // 单权限请求（Android 12 及以下）
+    private val requestSinglePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
-            loadImages()
+            loadMedia()
+        } else {
+            showPermissionDeniedMessage()
+        }
+    }
+
+    // 多权限请求（Android 13+，同时申请图片和视频权限）
+    private val requestMultiplePermissionsLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val anyGranted = permissions.values.any { it }
+        if (anyGranted) {
+            loadMedia()
         } else {
             showPermissionDeniedMessage()
         }
@@ -48,7 +61,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun setupRecyclerView() {
         adapter = GalleryAdapter { position ->
-            openImageViewer(position)
+            openMediaViewer(position)
         }
 
         binding.recyclerView.apply {
@@ -59,60 +72,83 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun checkPermissionAndLoad() {
-        val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            Manifest.permission.READ_MEDIA_IMAGES
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            // Android 13+ 分别检查图片和视频权限
+            val imagePermission = Manifest.permission.READ_MEDIA_IMAGES
+            val videoPermission = Manifest.permission.READ_MEDIA_VIDEO
+
+            val imageGranted = ContextCompat.checkSelfPermission(this, imagePermission) == PackageManager.PERMISSION_GRANTED
+            val videoGranted = ContextCompat.checkSelfPermission(this, videoPermission) == PackageManager.PERMISSION_GRANTED
+
+            when {
+                imageGranted && videoGranted -> loadMedia()
+                shouldShowRequestPermissionRationale(imagePermission) ||
+                shouldShowRequestPermissionRationale(videoPermission) -> {
+                    showPermissionRationale {
+                        requestMultiplePermissionsLauncher.launch(
+                            arrayOf(imagePermission, videoPermission)
+                        )
+                    }
+                }
+                else -> {
+                    requestMultiplePermissionsLauncher.launch(
+                        arrayOf(imagePermission, videoPermission)
+                    )
+                }
+            }
         } else {
-            Manifest.permission.READ_EXTERNAL_STORAGE
-        }
-
-        when {
-            ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED -> {
-                loadImages()
-            }
-            shouldShowRequestPermissionRationale(permission) -> {
-                showPermissionRationale(permission)
-            }
-            else -> {
-                requestPermissionLauncher.launch(permission)
-            }
-        }
-    }
-
-    private fun loadImages() {
-        binding.progressBar.visibility = View.VISIBLE
-        binding.emptyView.visibility = View.GONE
-
-        executor.execute {
-            val loadedImages = ImageLoader.loadImages(this)
-
-            runOnUiThread {
-                binding.progressBar.visibility = View.GONE
-                images = loadedImages
-
-                if (images.isEmpty()) {
-                    binding.emptyView.visibility = View.VISIBLE
-                } else {
-                    adapter.submitList(images)
+            val permission = Manifest.permission.READ_EXTERNAL_STORAGE
+            when {
+                ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED -> {
+                    loadMedia()
+                }
+                shouldShowRequestPermissionRationale(permission) -> {
+                    showPermissionRationale {
+                        requestSinglePermissionLauncher.launch(permission)
+                    }
+                }
+                else -> {
+                    requestSinglePermissionLauncher.launch(permission)
                 }
             }
         }
     }
 
-    private fun openImageViewer(position: Int) {
+    private fun loadMedia() {
+        binding.progressBar.visibility = View.VISIBLE
+        binding.emptyView.visibility = View.GONE
+
+        executor.execute {
+            val loaded = ImageLoader.loadMedia(this)
+
+            runOnUiThread {
+                binding.progressBar.visibility = View.GONE
+                mediaItems = loaded
+
+                if (mediaItems.isEmpty()) {
+                    binding.emptyView.visibility = View.VISIBLE
+                } else {
+                    adapter.submitList(mediaItems)
+                }
+            }
+        }
+    }
+
+    private fun openMediaViewer(position: Int) {
         val intent = Intent(this, ImageViewerActivity::class.java).apply {
-            putParcelableArrayListExtra(ImageViewerActivity.EXTRA_IMAGES, ArrayList(images))
+            putParcelableArrayListExtra(ImageViewerActivity.EXTRA_IMAGES, ArrayList(mediaItems))
             putExtra(ImageViewerActivity.EXTRA_POSITION, position)
         }
         startActivity(intent)
     }
 
-    private fun showPermissionRationale(permission: String) {
+    private fun showPermissionRationale(onGrant: () -> Unit) {
         Snackbar.make(
             binding.root,
             R.string.permission_required,
             Snackbar.LENGTH_INDEFINITE
         ).setAction(R.string.grant_permission) {
-            requestPermissionLauncher.launch(permission)
+            onGrant()
         }.show()
     }
 
