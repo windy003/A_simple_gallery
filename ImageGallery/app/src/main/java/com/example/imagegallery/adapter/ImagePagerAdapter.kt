@@ -25,6 +25,15 @@ class ImagePagerAdapter(
         private const val VIEW_TYPE_VIDEO = 1
     }
 
+    private var currentPosition: Int = 0
+
+    fun setCurrentPosition(recyclerView: RecyclerView, newPosition: Int) {
+        val oldPosition = currentPosition
+        currentPosition = newPosition
+        (recyclerView.findViewHolderForAdapterPosition(oldPosition) as? VideoViewHolder)?.pause()
+        (recyclerView.findViewHolderForAdapterPosition(newPosition) as? VideoViewHolder)?.play()
+    }
+
     override fun getItemViewType(position: Int): Int {
         return if (images[position].isVideo) VIEW_TYPE_VIDEO else VIEW_TYPE_IMAGE
     }
@@ -46,7 +55,7 @@ class ImagePagerAdapter(
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         when (holder) {
             is ImageViewHolder -> holder.bind(images[position])
-            is VideoViewHolder -> holder.bind(images[position])
+            is VideoViewHolder -> holder.bind(images[position], position == currentPosition)
         }
     }
 
@@ -95,8 +104,13 @@ class ImagePagerAdapter(
         private val binding: ItemVideoFullBinding
     ) : RecyclerView.ViewHolder(binding.root) {
 
-        fun bind(item: ImageItem) {
+        private var isPrepared = false
+        private var shouldAutoPlay = false
+
+        fun bind(item: ImageItem, isCurrentPage: Boolean) {
             binding.progressBar.visibility = View.VISIBLE
+            isPrepared = false
+            shouldAutoPlay = isCurrentPage
 
             val mediaController = MediaController(binding.root.context)
             mediaController.setAnchorView(binding.videoView)
@@ -105,8 +119,10 @@ class ImagePagerAdapter(
 
             binding.videoView.setOnPreparedListener { mp: MediaPlayer ->
                 binding.progressBar.visibility = View.GONE
-                // 自动播放
-                mp.start()
+                isPrepared = true
+                if (shouldAutoPlay) {
+                    mp.start()
+                }
             }
 
             binding.videoView.setOnErrorListener { _, _, _ ->
@@ -115,6 +131,21 @@ class ImagePagerAdapter(
             }
 
             binding.videoView.requestFocus()
+        }
+
+        fun play() {
+            if (isPrepared && !binding.videoView.isPlaying) {
+                binding.videoView.start()
+            } else {
+                shouldAutoPlay = true
+            }
+        }
+
+        fun pause() {
+            shouldAutoPlay = false
+            if (binding.videoView.isPlaying) {
+                binding.videoView.pause()
+            }
         }
 
         fun release() {

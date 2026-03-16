@@ -154,6 +154,8 @@ class ImageViewerActivity : AppCompatActivity() {
             registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
                 override fun onPageSelected(position: Int) {
                     updateCounter(position)
+                    val rv = getChildAt(0) as? androidx.recyclerview.widget.RecyclerView ?: return
+                    adapter.setCurrentPosition(rv, position)
                 }
             })
         }
