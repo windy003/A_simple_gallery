@@ -1,13 +1,19 @@
 package com.example.imagegallery
 
 import android.Manifest
+import android.app.Activity
+import android.app.RecoverableSecurityException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.MediaStore
 import android.provider.Settings
 import android.view.View
+import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
@@ -16,6 +22,7 @@ import com.example.imagegallery.adapter.GalleryAdapter
 import com.example.imagegallery.databinding.ActivityMainBinding
 import com.example.imagegallery.model.ImageItem
 import com.example.imagegallery.util.ImageLoader
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.snackbar.Snackbar
 import java.util.concurrent.Executors
 
@@ -27,7 +34,10 @@ class MainActivity : AppCompatActivity() {
 
     private val executor = Executors.newSingleThreadExecutor()
 
-    // 单权限请求（Android 12 及以下）
+    // 批量删除相关
+    private var pendingDeleteItems: List<ImageItem> = emptyList()
+    private var pendingDeleteIndex = 0
+
     private val requestSinglePermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
     ) { isGranted ->
@@ -38,7 +48,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    // 多权限请求（Android 13+，同时申请图片和视频权限）
     private val requestMultiplePermissionsLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
@@ -50,19 +59,53 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private val deleteRequestLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            onBatchDeleteSuccess()
+        } else {
+            Toast.makeText(this, R.string.delete_failed, Toast.LENGTH_SHORT).show()
+            exitSelectionMode()
+        }
+    }
+
+    // 用于在 ImageViewerActivity 删除后刷新列表
+    private val viewerLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            loadMedia()
+        }
+    }
+
+    private val backPressedCallback = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() {
+            exitSelectionMode()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        onBackPressedDispatcher.addCallback(this, backPressedCallback)
+
         setupRecyclerView()
+        setupSelectionBar()
         checkPermissionAndLoad()
     }
 
     private fun setupRecyclerView() {
-        adapter = GalleryAdapter { position ->
-            openMediaViewer(position)
-        }
+        adapter = GalleryAdapter(
+            onItemClick = { position ->
+                openMediaViewer(position)
+            },
+            onItemLongClick = { _ ->
+                updateSelectionUi()
+            }
+        )
 
         binding.recyclerView.apply {
             layoutManager = GridLayoutManager(this@MainActivity, 3)
@@ -71,9 +114,98 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun setupSelectionBar() {
+        binding.btnDeleteSelected.setOnClickListener {
+            confirmBatchDelete()
+        }
+
+        binding.btnSelectAll.setOnClickListener {
+            adapter.selectAll()
+            updateSelectionUi()
+        }
+    }
+
+    private fun updateSelectionUi() {
+        if (adapter.isSelectionMode) {
+            val count = adapter.getSelectedCount()
+            binding.selectionBar.visibility = View.VISIBLE
+            binding.selectionCount.text = getString(R.string.selected_count, count)
+            backPressedCallback.isEnabled = true
+
+            if (count == 0) {
+                exitSelectionMode()
+            }
+        } else {
+            binding.selectionBar.visibility = View.GONE
+            backPressedCallback.isEnabled = false
+        }
+    }
+
+    private fun exitSelectionMode() {
+        adapter.exitSelectionMode()
+        binding.selectionBar.visibility = View.GONE
+        backPressedCallback.isEnabled = false
+    }
+
+    private fun confirmBatchDelete() {
+        val selectedItems = adapter.getSelectedItems()
+        if (selectedItems.isEmpty()) return
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.delete_confirm_title)
+            .setMessage(getString(R.string.delete_batch_confirm_message, selectedItems.size))
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.delete) { _, _ ->
+                deleteBatch(selectedItems)
+            }
+            .show()
+    }
+
+    private fun deleteBatch(items: List<ImageItem>) {
+        pendingDeleteItems = items
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // Android 11+: 使用系统批量删除请求
+            val uris = items.map { it.uri }
+            val deleteRequest = MediaStore.createDeleteRequest(contentResolver, uris)
+            deleteRequestLauncher.launch(IntentSenderRequest.Builder(deleteRequest.intentSender).build())
+        } else {
+            // Android 10 及以下: 逐个删除
+            pendingDeleteIndex = 0
+            deleteNextItem()
+        }
+    }
+
+    private fun deleteNextItem() {
+        if (pendingDeleteIndex >= pendingDeleteItems.size) {
+            onBatchDeleteSuccess()
+            return
+        }
+
+        val item = pendingDeleteItems[pendingDeleteIndex]
+        try {
+            contentResolver.delete(item.uri, null, null)
+            pendingDeleteIndex++
+            deleteNextItem()
+        } catch (e: SecurityException) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && e is RecoverableSecurityException) {
+                val intentSender = e.userAction.actionIntent.intentSender
+                deleteRequestLauncher.launch(IntentSenderRequest.Builder(intentSender).build())
+            } else {
+                pendingDeleteIndex++
+                deleteNextItem()
+            }
+        }
+    }
+
+    private fun onBatchDeleteSuccess() {
+        Toast.makeText(this, R.string.deleted_successfully, Toast.LENGTH_SHORT).show()
+        exitSelectionMode()
+        loadMedia()
+    }
+
     private fun checkPermissionAndLoad() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            // Android 13+ 分别检查图片和视频权限
             val imagePermission = Manifest.permission.READ_MEDIA_IMAGES
             val videoPermission = Manifest.permission.READ_MEDIA_VIDEO
 
@@ -139,7 +271,7 @@ class MainActivity : AppCompatActivity() {
             putParcelableArrayListExtra(ImageViewerActivity.EXTRA_IMAGES, ArrayList(mediaItems))
             putExtra(ImageViewerActivity.EXTRA_POSITION, position)
         }
-        startActivity(intent)
+        viewerLauncher.launch(intent)
     }
 
     private fun showPermissionRationale(onGrant: () -> Unit) {

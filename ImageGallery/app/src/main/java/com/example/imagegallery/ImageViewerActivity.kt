@@ -1,9 +1,17 @@
 package com.example.imagegallery
 
+import android.app.Activity
+import android.app.RecoverableSecurityException
+import android.content.ContentResolver
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.provider.MediaStore
 import android.view.View
 import android.view.ViewGroup
+import android.widget.Toast
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
@@ -26,8 +34,19 @@ class ImageViewerActivity : AppCompatActivity() {
     }
 
     private lateinit var binding: ActivityImageViewerBinding
-    private var images: List<ImageItem> = emptyList()
+    private var images: MutableList<ImageItem> = mutableListOf()
     private var isUiVisible = true
+    private var pendingDeleteUri: Uri? = null
+
+    private val deleteRequestLauncher = registerForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            onDeleteSuccess()
+        } else {
+            Toast.makeText(this, R.string.delete_failed, Toast.LENGTH_SHORT).show()
+        }
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,6 +71,9 @@ class ImageViewerActivity : AppCompatActivity() {
                 topMargin = insets.top + defaultMargin
             }
             binding.btnInfo.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+                topMargin = insets.top + defaultMargin
+            }
+            binding.btnDelete.updateLayoutParams<ViewGroup.MarginLayoutParams> {
                 topMargin = insets.top + defaultMargin
             }
             binding.imageCounter.updateLayoutParams<ViewGroup.MarginLayoutParams> {
@@ -84,6 +106,7 @@ class ImageViewerActivity : AppCompatActivity() {
             binding.imageCounter.visibility = View.GONE
             binding.btnBack.visibility = View.GONE
             binding.btnInfo.visibility = View.GONE
+            binding.btnDelete.visibility = View.GONE
         } else {
             showSystemUi()
             if (images.size > 1) {
@@ -91,6 +114,7 @@ class ImageViewerActivity : AppCompatActivity() {
             }
             binding.btnBack.visibility = View.VISIBLE
             binding.btnInfo.visibility = View.VISIBLE
+            binding.btnDelete.visibility = View.VISIBLE
         }
     }
 
@@ -110,18 +134,18 @@ class ImageViewerActivity : AppCompatActivity() {
                 size = 0,
                 isVideo = isVideo
             )
-            images = listOf(externalItem)
+            images = mutableListOf(externalItem)
         } else {
             images = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                intent.getParcelableArrayListExtra(EXTRA_IMAGES, ImageItem::class.java) ?: emptyList()
+                intent.getParcelableArrayListExtra(EXTRA_IMAGES, ImageItem::class.java)?.toMutableList() ?: mutableListOf()
             } else {
                 @Suppress("DEPRECATION")
-                intent.getParcelableArrayListExtra(EXTRA_IMAGES) ?: emptyList()
+                intent.getParcelableArrayListExtra<ImageItem>(EXTRA_IMAGES)?.toMutableList() ?: mutableListOf()
             }
         }
     }
 
-    private fun getFileNameFromUri(uri: android.net.Uri): String {
+    private fun getFileNameFromUri(uri: Uri): String {
         var name = ""
         if (uri.scheme == "content") {
             contentResolver.query(uri, null, null, null, null)?.use { cursor ->
@@ -179,6 +203,75 @@ class ImageViewerActivity : AppCompatActivity() {
         binding.btnInfo.setOnClickListener {
             showMediaInfo()
         }
+
+        binding.btnDelete.setOnClickListener {
+            confirmDelete()
+        }
+    }
+
+    private fun confirmDelete() {
+        val currentPosition = binding.viewPager.currentItem
+        if (currentPosition < 0 || currentPosition >= images.size) return
+
+        val item = images[currentPosition]
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.delete_confirm_title)
+            .setMessage(R.string.delete_confirm_message)
+            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.delete) { _, _ ->
+                deleteMedia(item)
+            }
+            .show()
+    }
+
+    private fun deleteMedia(item: ImageItem) {
+        pendingDeleteUri = item.uri
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            // Android 11+: 使用系统删除请求对话框
+            val deleteRequest = MediaStore.createDeleteRequest(contentResolver, listOf(item.uri))
+            deleteRequestLauncher.launch(IntentSenderRequest.Builder(deleteRequest.intentSender).build())
+        } else {
+            // Android 10 及以下
+            try {
+                val rows = contentResolver.delete(item.uri, null, null)
+                if (rows > 0) {
+                    onDeleteSuccess()
+                } else {
+                    Toast.makeText(this, R.string.delete_failed, Toast.LENGTH_SHORT).show()
+                }
+            } catch (e: SecurityException) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && e is RecoverableSecurityException) {
+                    val intentSender = e.userAction.actionIntent.intentSender
+                    deleteRequestLauncher.launch(IntentSenderRequest.Builder(intentSender).build())
+                } else {
+                    Toast.makeText(this, R.string.delete_failed, Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    private fun onDeleteSuccess() {
+        Toast.makeText(this, R.string.deleted_successfully, Toast.LENGTH_SHORT).show()
+
+        setResult(Activity.RESULT_OK)
+
+        val currentPosition = binding.viewPager.currentItem
+        if (currentPosition >= 0 && currentPosition < images.size) {
+            images.removeAt(currentPosition)
+        }
+
+        if (images.isEmpty()) {
+            finish()
+            return
+        }
+
+        val adapter = binding.viewPager.adapter as? ImagePagerAdapter
+        adapter?.notifyDataSetChanged()
+        val newPosition = currentPosition.coerceAtMost(images.size - 1)
+        binding.viewPager.setCurrentItem(newPosition, false)
+        updateCounter(newPosition)
     }
 
     private fun showMediaInfo() {

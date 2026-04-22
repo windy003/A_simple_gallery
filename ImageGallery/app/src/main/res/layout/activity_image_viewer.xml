@@ -50,6 +50,18 @@
         android:background="?attr/selectableItemBackgroundBorderless"
         android:contentDescription="@string/image_info"
         android:src="@drawable/ic_info"
+        app:layout_constraintEnd_toStartOf="@id/btnDelete"
+        app:layout_constraintTop_toTopOf="parent"
+        app:tint="@android:color/white" />
+
+    <ImageButton
+        android:id="@+id/btnDelete"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_margin="8dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/delete"
+        android:src="@drawable/ic_delete"
         app:layout_constraintEnd_toStartOf="@id/imageCounter"
         app:layout_constraintTop_toTopOf="parent"
         app:tint="@android:color/white" />

@@ -29,6 +29,24 @@
             android:src="@drawable/ic_play"
             android:visibility="gone" />
 
+        <!-- 选中遮罩层 -->
+        <View
+            android:id="@+id/selectionOverlay"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="#44448AFF"
+            android:visibility="gone" />
+
+        <!-- 选中图标 -->
+        <ImageView
+            android:id="@+id/checkIcon"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_gravity="top|end"
+            android:layout_margin="4dp"
+            android:src="@drawable/ic_uncheck_circle"
+            android:visibility="gone" />
+
     </FrameLayout>
 
 </androidx.cardview.widget.CardView>
