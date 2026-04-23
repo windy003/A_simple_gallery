@@ -5,9 +5,11 @@ import android.app.Activity
 import android.app.RecoverableSecurityException
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Environment
 import android.provider.MediaStore
 import android.provider.Settings
 import android.view.View
@@ -31,6 +33,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var adapter: GalleryAdapter
     private var mediaItems: List<ImageItem> = emptyList()
+    private var hasLoadedOnce = false
 
     private val executor = Executors.newSingleThreadExecutor()
 
@@ -93,8 +96,59 @@ class MainActivity : AppCompatActivity() {
         onBackPressedDispatcher.addCallback(this, backPressedCallback)
 
         setupRecyclerView()
+        setupSwipeRefresh()
         setupSelectionBar()
         checkPermissionAndLoad()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // 首次加载由 checkPermissionAndLoad 处理，之后每次切回 app 自动刷新
+        if (hasLoadedOnce) {
+            scanAndRefresh()
+        }
+    }
+
+    /**
+     * 主动触发 MediaScanner 扫描常见媒体目录，扫描完成后再加载数据。
+     * 解决通过文件管理器复制文件后 MediaStore 不会立即更新的问题。
+     */
+    private fun scanAndRefresh() {
+        executor.execute {
+            val mediaDirs = listOfNotNull(
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DCIM),
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
+                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
+            )
+
+            // 收集所有媒体目录下的文件路径
+            val paths = mutableListOf<String>()
+            for (dir in mediaDirs) {
+                if (dir.exists()) {
+                    dir.walkTopDown()
+                        .filter { it.isFile }
+                        .forEach { paths.add(it.absolutePath) }
+                }
+            }
+
+            if (paths.isEmpty()) {
+                runOnUiThread { loadMedia() }
+                return@execute
+            }
+
+            val remaining = java.util.concurrent.atomic.AtomicInteger(paths.size)
+
+            MediaScannerConnection.scanFile(
+                this,
+                paths.toTypedArray(),
+                null
+            ) { _, _ ->
+                if (remaining.decrementAndGet() == 0) {
+                    runOnUiThread { loadMedia() }
+                }
+            }
+        }
     }
 
     private fun setupRecyclerView() {
@@ -111,6 +165,12 @@ class MainActivity : AppCompatActivity() {
             layoutManager = GridLayoutManager(this@MainActivity, 3)
             adapter = this@MainActivity.adapter
             setHasFixedSize(true)
+        }
+    }
+
+    private fun setupSwipeRefresh() {
+        binding.swipeRefreshLayout.setOnRefreshListener {
+            scanAndRefresh()
         }
     }
 
@@ -247,7 +307,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun loadMedia() {
-        binding.progressBar.visibility = View.VISIBLE
+        // 仅在非下拉刷新时显示居中 ProgressBar
+        if (!binding.swipeRefreshLayout.isRefreshing) {
+            binding.progressBar.visibility = View.VISIBLE
+        }
         binding.emptyView.visibility = View.GONE
 
         executor.execute {
@@ -255,7 +318,9 @@ class MainActivity : AppCompatActivity() {
 
             runOnUiThread {
                 binding.progressBar.visibility = View.GONE
+                binding.swipeRefreshLayout.isRefreshing = false
                 mediaItems = loaded
+                hasLoadedOnce = true
 
                 if (mediaItems.isEmpty()) {
                     binding.emptyView.visibility = View.VISIBLE

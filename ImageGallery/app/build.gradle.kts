@@ -13,7 +13,7 @@ android {
         minSdk = 24
         targetSdk = 34
         versionCode = 1
-        versionName = "2026/4/22-1"
+        versionName = "2026/4/23-1"
     }
 
     buildTypes {
@@ -54,6 +54,9 @@ dependencies {
 
     // PhotoView - 手势缩放
     implementation("com.github.chrisbanes:PhotoView:2.3.0")
+
+    // SwipeRefreshLayout - 下拉刷新
+    implementation("androidx.swiperefreshlayout:swiperefreshlayout:1.1.0")
 
     // Activity Result API
     implementation("androidx.activity:activity-ktx:1.8.2")
