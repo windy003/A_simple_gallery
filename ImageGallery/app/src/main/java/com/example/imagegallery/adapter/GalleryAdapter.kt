@@ -11,6 +11,7 @@ import coil.decode.VideoFrameDecoder
 import com.example.imagegallery.R
 import com.example.imagegallery.databinding.ItemGalleryBinding
 import com.example.imagegallery.model.ImageItem
+import java.util.Locale
 
 class GalleryAdapter(
     private val onItemClick: (position: Int) -> Unit,
@@ -116,6 +117,12 @@ class GalleryAdapter(
                     error(R.drawable.placeholder)
                 }
                 binding.playIcon.visibility = View.VISIBLE
+                if (item.duration > 0) {
+                    binding.durationText.text = formatDuration(item.duration)
+                    binding.durationText.visibility = View.VISIBLE
+                } else {
+                    binding.durationText.visibility = View.GONE
+                }
             } else {
                 binding.imageView.load(item.uri) {
                     crossfade(true)
@@ -123,6 +130,7 @@ class GalleryAdapter(
                     error(R.drawable.placeholder)
                 }
                 binding.playIcon.visibility = View.GONE
+                binding.durationText.visibility = View.GONE
             }
 
             if (isSelectionMode) {
@@ -139,6 +147,18 @@ class GalleryAdapter(
                 binding.checkIcon.visibility = View.GONE
                 binding.selectionOverlay.visibility = View.GONE
             }
+        }
+    }
+
+    private fun formatDuration(durationMs: Long): String {
+        val totalSeconds = durationMs / 1000
+        val hours = totalSeconds / 3600
+        val minutes = (totalSeconds % 3600) / 60
+        val seconds = totalSeconds % 60
+        return if (hours > 0) {
+            String.format(Locale.getDefault(), "%d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds)
         }
     }
 
